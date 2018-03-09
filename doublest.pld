@@ -1,0 +1,102 @@
+Name	DoubleST;
+PartNo	00;
+Date	7/3/2018;
+Revision 02;
+Designer	Troed;
+Company	SECOM;
+Assembly	None;
+Location	;
+Device	g20v8;
+
+/* inputs */
+PIN 1 = clk;
+/* PIN 2 = NC; */
+PIN 3 = DE;
+PIN 4 = C64;
+PIN 5 = C32;
+PIN 6 = S1;
+PIN 7 = S0;
+/* PIN 8 = NC */
+/* PIN 9 = NC */
+/* PIN 10 = NC */
+/* PIN 11 = NC */
+
+/* outputs */
+/* PIN 13 = OEN */
+/* PIN 14 = NC */
+PIN 15 = MMUDE;
+PIN 16 = SHFTCLK;
+PIN 17 = MMUCLK;
+PIN 18 = CPUCLK;
+PIN 19 = GLUECLK;
+PIN 20 = MFPCLK;
+PIN 21 = C2;
+PIN 22 = SC;
+/* PIN 23 = NC */
+
+
+/* power pins */
+PIN 12 = GND;
+PIN 24 = VCC;
+
+/* Clock to use is either 64MHz or 32MHz depending on state of the switches. One switch combination invalid. Basically, Switch0 decided between 64 and 32MHz, S1 between doubleST video modes or not.
+
+ This clock (output) is then wired to pin1 as input clock for the GAL itself */
+
+/* BOOLEAN-EQUATIONS */
+
+/*
+  S0 *  S1   = 64MHz Shifter clock, 32MHz MMU, 16MHz CPU = doubleST
+  S0 * !S1   = 32MHz Shifter clock, 32MHz MMU, 16MHz CPU = stefan16Mhz
+ !S0 * !S1   = 32MHz Shifter clock, 16MHz MMU,  8MHz CPU = stock */
+
+/* COMBINATORIAL */
+
+/* We clock the GAL with twice the needed MMU clock */
+/* 64, 64, 32 */
+SC = (S0 & S1 & C64) #
+     (S0 & !S1 & C64) #
+     (!S0 & !S1 & C32);
+
+/* 64, 32, 32 */
+/* MMUCLK instead of CLK32 since we want to be on a division of 64.000MHz and not 32.08 */
+/* inverted MMUCLK to see if we get all on the falling edge */
+SHFTCLK = (S0 & S1 & C64) #
+          (S0 & !S1 & !MMUCLK) #
+          (!S0 & !S1 & C32);
+
+/* DE either pass through or ANDed with 2MHz */
+/* add another switch for hardware overscan mod? */
+MMUDE    = DE & S0 & S1 #
+           DE & C2 & S0 & !S1 #
+           DE & !S0 & !S1;
+
+/* REGISTERED (clocked logic) - happens at either 64 or 32MHz depending on switch status */
+
+/* 32, 32, 16 */
+MMUCLK.D = !MMUCLK;
+
+/* 16, 16, 8 */
+CPUCLK.D = MMUCLK & !CPUCLK #
+           CPUCLK & !MMUCLK;
+
+/* 8, 8, 8 */
+GLUECLK.D = MMUCLK & CPUCLK & !GLUECLK & S0 & S1 #
+            MMUCLK & CPUCLK & !GLUECLK & S0 & !S1 #
+            MMUCLK & !GLUECLK & !S0 & !S1 #
+            GLUECLK & !MMUCLK # 
+            GLUECLK & !CPUCLK & S0 & S1 #
+            GLUECLK & !CPUCLK & S0 & !S1;
+
+/* 4, 4, 4 */
+MFPCLK.D = MMUCLK & CPUCLK & GLUECLK & !MFPCLK #
+           MFPCLK & !MMUCLK #
+           MFPCLK & !CPUCLK #
+           MFPCLK & !GLUECLK;
+
+/* 2, 2, 2 */
+C2.D     = MMUCLK & CPUCLK & GLUECLK & MFPCLK & !C2 #
+           C2 & !MMUCLK #
+           C2 & !CPUCLK #
+           C2 & !GLUECLK #
+           C2 & !MFPCLK;
